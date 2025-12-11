@@ -1,3 +1,7 @@
 litserve
 coqui-tts
 torch
+transformers
+torchvision
+torchaudio
+pydub

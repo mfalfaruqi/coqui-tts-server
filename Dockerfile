@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
+FROM pytorch/pytorch:2.9.1-cuda12.8-cudnn9-runtime
 
 WORKDIR /app
 
@@ -6,6 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libsndfile1 \
     git \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage cache
@@ -24,4 +25,4 @@ COPY speakers .
 EXPOSE 8000
 
 # Run the server
-CMD ["python", "server.py"]
+ENTRYPOINT ["python", "-u", "server.py"]

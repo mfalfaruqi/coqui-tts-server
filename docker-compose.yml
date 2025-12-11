@@ -1,12 +1,12 @@
 services:
   coqui-server:
-    container_name: coqui-server
+    container_name: coqui-tts-server
     build: .
+    image: coqui-tts-server:latest
     ports:
       - "8000:8000"
     volumes:
-      - ./speakers:/app/speakers
-      - ./models:/root/.local/share/tts # Persist downloaded models
+      - ./data/models:/root/.local/share/tts # Persist downloaded models
     environment:
       - TTS_MODEL_NAME=tts_models/multilingual/multi-dataset/xtts_v2
       - DEFAULT_VOICE=Craig Gutsy
