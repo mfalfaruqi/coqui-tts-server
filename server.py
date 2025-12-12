@@ -13,7 +13,7 @@ os.environ["COQUI_TOS_AGREED"] = "1"
 use_cuda = torch.cuda.is_available()
 
 
-class XTTSV2API(ls.LitAPI):
+class CoquiAPI(ls.LitAPI):
     def setup(self, device):
         self.device = device
 
@@ -207,6 +207,6 @@ class XTTSV2API(ls.LitAPI):
 if __name__ == "__main__":
     accelerator = "gpu" if use_cuda else "auto"
 
-    api = XTTSV2API(api_path="/v1/audio/speech")
+    api = CoquiAPI(api_path="/v1/audio/speech")
     server = ls.LitServer(api, accelerator=accelerator)
     server.run(port=os.getenv("PORT", 8000), generate_client_file=False)
