@@ -1,0 +1,10 @@
+[
+    {
+        "model_name": "tts_models/multilingual/multi-dataset/xtts_v2",
+        "default_voice": "Craig Gutsy"
+    },
+    {
+        "model_name": "tts_models/ara/fairseq/vits",
+        "default_voice": "speakers/default.wav"
+    }
+]

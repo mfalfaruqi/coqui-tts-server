@@ -1,48 +1,124 @@
 import os
 import io
+import json
 import litserve as ls
 import uuid
 
 from TTS.api import TTS
 from fastapi.responses import Response
 from pydub import AudioSegment
+import torch
 
 os.environ["COQUI_TOS_AGREED"] = "1"
+use_cuda = torch.cuda.is_available()
 
 
 class XTTSV2API(ls.LitAPI):
     def setup(self, device):
         self.device = device
 
-        # Read model name from ENV
-        model_name = os.getenv(
-            "TTS_MODEL_NAME", "tts_models/multilingual/multi-dataset/xtts_v2"
-        )
-        print(f"Loading XTTSv2 model '{model_name}' on {device}...")
+        # Load list of allowed TTS models from JSON config
+        config_path = os.getenv("TTS_MODELS_CONFIG", "tts_models.json")
+        if not os.path.exists(config_path):
+            raise RuntimeError(
+                f"TTS models config file '{config_path}' not found. "
+                "Create it (e.g. via tts_models.json) with a JSON array of model configs."
+            )
 
-        # Init TTS with the target model name
-        self.tts = TTS(model_name).to(device)
-        print("Model loaded successfully.")
+        with open(config_path, "r", encoding="utf-8") as f:
+            try:
+                raw_models = json.load(f)
+            except json.JSONDecodeError as e:
+                raise RuntimeError(
+                    f"Failed to parse TTS models config '{config_path}': {e}"
+                )
+
+        if not isinstance(raw_models, list) or not raw_models:
+            raise RuntimeError(
+                f"TTS models config '{config_path}' must be in valid JSON format."
+            )
+
+        # register models
+        model_configs = []
+        for idx, item in enumerate(raw_models):
+            model_configs.append(
+                {
+                    "model_name": item["model_name"],
+                    "default_voice": item["default_voice"],
+                }
+            )
+
+        model_names = [cfg["model_name"] for cfg in model_configs]
+
+        # Optional default model name, must be one of the configured models
+        default_model_name = os.getenv("DEFAULT_TTS_MODEL_NAME")
+        default_voice = os.getenv("DEFAULT_VOICE")
+        if default_model_name and default_model_name not in model_names:
+            model_configs.append(
+                {
+                    "model_name": default_model_name,
+                    "default_voice": default_voice,
+                }
+            )
+
+        self.models = {}
+        self.model_default_voices = {}
+        for cfg in model_configs:
+            name = cfg["model_name"]
+            print(f"Loading TTS model '{name}' on {device}...")
+            self.models[name] = TTS(name).to(device)
+            self.model_default_voices[name] = cfg.get("default_voice")
+
+        self.default_model_name = default_model_name
 
     def decode_request(self, request):
         # OpenAI API compatible request structure
         # request is a dictionary from the JSON body
 
+        # 0. Model selection (REQUIRED and must be one of the preloaded models)
+        model_name = request.get("model")
+        if model_name is None:
+            raise ValueError("Missing 'model' field in request body.")
+        if model_name not in self.models:
+            raise ValueError(
+                f"Requested model '{model_name}' is not available. "
+                f"Available models: {list(self.models.keys())}"
+            )
+
+        # 1. Text input
         text = request.get("input")
+        if text is None or text == "":
+            raise ValueError("Missing or empty 'input' text field in request body.")
 
         # 2. Map 'voice' to 'speaker_ref' (string)
-        # Use ENV default if not provided
-        default_voice = os.getenv("DEFAULT_VOICE", "Craig Gutsy")
-        speaker_ref = request.get("voice", default_voice)
+        # Priority: explicit request voice > per-model default > env default
+        request_voice = request.get("voice")
+        if request_voice is not None:
+            speaker_ref = request_voice
+        else:
+            model_default_voice = getattr(self, "model_default_voices", {}).get(
+                model_name
+            )
+            if model_default_voice:
+                speaker_ref = model_default_voice
+            else:
+                speaker_ref = os.getenv("DEFAULT_VOICE", "Craig Gutsy")
 
         # 3. Language
         language = request.get("instructions", "en")  # Default to English
 
-        # Note: 'model' parameter is ignored as per requirements
-
-        return {"text": text, "language": language, "speaker_ref": speaker_ref}
+        return {
+            "model_name": model_name,
+            "text": text,
+            "language": language,
+            "speaker_ref": speaker_ref,
+            "response_format": request.get("response_format", "mp3"),
+        }
 
     def predict(self, inputs):
+        model_name = inputs["model_name"]
+        tts = self.models[model_name]
+
         text = inputs["text"]
         language = inputs["language"]
         speaker_ref = inputs["speaker_ref"]
@@ -57,12 +133,21 @@ class XTTSV2API(ls.LitAPI):
         speaker = None
 
         # Resolve speaker_ref to a file
-        # Priority 1: Exact filename match in speakers/
-        if os.path.exists(os.path.join(speakers_dir, speaker_ref)):
+        # Priority 1: If speaker_ref already looks like a path, try it directly.
+        if os.path.isabs(speaker_ref) or os.path.sep in speaker_ref:
+            if os.path.exists(speaker_ref):
+                speaker_wav = speaker_ref
+
+        # Priority 2: Exact filename match in speakers/
+        if speaker_wav is None and os.path.exists(
+            os.path.join(speakers_dir, speaker_ref)
+        ):
             speaker_wav = os.path.join(speakers_dir, speaker_ref)
 
-        # Priority 2: Match {speaker_ref}.wav
-        elif os.path.exists(os.path.join(speakers_dir, f"{speaker_ref}.wav")):
+        # Priority 3: Match {speaker_ref}.wav
+        if speaker_wav is None and os.path.exists(
+            os.path.join(speakers_dir, f"{speaker_ref}.wav")
+        ):
             speaker_wav = os.path.join(speakers_dir, f"{speaker_ref}.wav")
 
         if speaker_wav:
@@ -74,17 +159,13 @@ class XTTSV2API(ls.LitAPI):
             speaker = speaker_ref
             speaker_wav = None
 
-        # Note: We removed the auto-download default logic because now any missing file is treated as a speaker name.
-        # This assumes the user knows what they are doing (using a model that supports speaker names).
-
         if not speaker_wav and not speaker:
-            # Should not happen given logic above (speaker becomes speaker_ref), but for safety:
             raise RuntimeError("No speaker reference available.")
 
         print(
-            f"Generating TTS with language: {language}, speaker_wav: {speaker_wav}, speaker: {speaker}"
+            f"Generating TTS '{text}' with model: {model_name}, language: {language}, speaker_wav: {speaker_wav}, speaker: {speaker}"
         )
-        self.tts.tts_to_file(
+        tts.tts_to_file(
             text=text,
             speaker_wav=speaker_wav,
             language=language,
@@ -92,31 +173,37 @@ class XTTSV2API(ls.LitAPI):
             speaker=speaker,
         )
 
-        return output_path
+        return {
+            "output_path": output_path,
+            "response_format": inputs["response_format"],
+        }
 
-    def encode_response(self, output_path):
-        # Stream the file back? Or just return it.
-        # LitServe supports streaming response?
-        # For now, let's return the file content.
-        # But OpenAI API returns binary audio.
+    def encode_response(self, outputs):
+        # Return the file content.
+        response_format = outputs["response_format"]
+        output_path = outputs["output_path"]
 
-        # Write MP3 to bytes
         audio = AudioSegment.from_wav(output_path)
-        mp3_buffer = io.BytesIO()
-        audio.export(mp3_buffer, format="mp3")
+        buffer = io.BytesIO()
+        audio.export(buffer, format=response_format)
 
         # Clean up
         os.remove(output_path)
 
+        media_type = f"audio/{str(response_format).lower()}"
+
+        if response_format == "mp3":
+            media_type = "audio/mpeg"
+
         return Response(
-            content=mp3_buffer.getvalue(),
-            headers={"Content-Type": "audio/mpeg"},
+            content=buffer.getvalue(),
+            media_type=media_type,
         )
 
 
 if __name__ == "__main__":
-    # We need to map the OpenAI endpoint
-    # OpenAI TTS endpoint: POST https://api.openai.com/v1/audio/speech
+    accelerator = "gpu" if use_cuda else "auto"
+
     api = XTTSV2API(api_path="/v1/audio/speech")
-    server = ls.LitServer(api, accelerator="gpu")
-    server.run(port=8000)
+    server = ls.LitServer(api, accelerator=accelerator)
+    server.run(port=os.getenv("PORT", 8000), generate_client_file=False)

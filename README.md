@@ -1,44 +1,64 @@
-# Coqui Server
+# Coqui TTS Server
 
-A minimal Python-based server packaged with Docker for quick deployment.
+A small Dockerized Coqui TTS HTTP server that serves simple OpenAI compatible API:
 
-This repository includes:
+- [`POST /v1/audio/speech`](server.py:168) &rarr; returns `audio/mpeg`
 
-- server.py
-- requirements.txt
-- Dockerfile
-- docker-compose.yml
-- .env.example
-- speakers/ (sample audio assets)
+## Run with Docker
 
-Getting started
+```bash
+cp .env.example .env
+docker-compose up --build
+```
 
-Prerequisites:
+Server will usually be at:
 
-- Docker and Docker Compose (or Python 3.8+ if running locally)
+- `http://localhost:8000/v1/audio/speech`
 
-Quick start (Docker)
+## Run locally (no Docker)
 
-- Copy the example environment:
-  cp .env.example .env
+```bash
+pip install -r requirements.txt
+python server.py
+```
 
-- Build and start the services:
-  docker-compose up --build
+## Configure models
 
-- The server should be reachable at <http://localhost:8000/> (adjust in docker-compose.yml)
+Edit [`tts_models.json`](tts_models.json) to list the models you want to preload:
 
-Local development (without Docker)
+```json
+[
+  {
+    "model_name": "tts_models/multilingual/multi-dataset/xtts_v2",
+    "default_voice": "Craig Gutsy"
+  },
+  {
+    "model_name": "tts_models/ara/fairseq/vits",
+    "default_voice": "speakers/default.wav"
+  }
+]
+```
 
-- Install dependencies:
-  pip install -r requirements.txt
+- `model_name` – Coqui TTS model id
+- `default_voice` – optional; speaker name or path to a WAV file
 
-- Run the server:
-  python server.py
+Each model in this file is loaded once at startup. The `model` field in the request must match one of these `model_name` values.
 
-Environment variables
+## Call the API
 
-See .env.example for a template of the required variables.
+Basic example:
 
-License
+```bash
+curl -X POST "http://localhost:8000/v1/audio/speech" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tts_models/multilingual/multi-dataset/xtts_v2",
+    "input": "Hello from Coqui TTS"
+  }' \
+  --output output.mp3
+```
 
-This repository does not include a license file. Use at your own risk.
+Optional JSON fields:
+
+- `voice` – overrides the default voice for this request
+- `instructions` – language code (for multilingual models), default `"en"`

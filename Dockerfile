@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY server.py .
 COPY speakers .
+RUN mkdir output data
 
 # Expose port
 EXPOSE 8000

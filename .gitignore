@@ -1,3 +1,24 @@
-data/
-.venv/
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# IDE
+.vscode/
 .kilocode/
+
+# Virtual environments
+.venv
+
+# config
+.env
+.env.*
+!.env.example
+
+# data
+data/*
+output/*
+!.gitkeep
