@@ -162,6 +162,9 @@ class XTTSV2API(ls.LitAPI):
         if not speaker_wav and not speaker:
             raise RuntimeError("No speaker reference available.")
 
+        if "multi" not in model_name:
+            language = None
+
         print(
             f"Generating TTS '{text}' with model: {model_name}, language: {language}, speaker_wav: {speaker_wav}, speaker: {speaker}"
         )
