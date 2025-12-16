@@ -1,10 +1,18 @@
 [
     {
         "model_name": "tts_models/multilingual/multi-dataset/xtts_v2",
-        "default_voice": "Craig Gutsy"
+        "default_voice": "Ana Florence"
     },
     {
-        "model_name": "tts_models/ara/fairseq/vits",
-        "default_voice": "speakers/default.wav"
+        "model_name": "tts_models/multilingual/multi-dataset/your_tts",
+        "default_voice": ""
+    },
+    {
+        "model_name": "tts_models/eng/fairseq/vits",
+        "default_voice": ""
+    },
+    {
+        "model_name": "tts_models/eng/fairseq/vits",
+        "default_voice": ""
     }
 ]

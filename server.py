@@ -65,9 +65,10 @@ class CoquiAPI(ls.LitAPI):
         self.model_default_voices = {}
         for cfg in model_configs:
             name = cfg["model_name"]
-            print(f"Loading TTS model '{name}' on {device}...")
+            voice = cfg.get("default_voice")
+            print(f"Loading TTS model '{name}' voice '{voice}' on {device}...")
             self.models[name] = TTS(name).to(device)
-            self.model_default_voices[name] = cfg.get("default_voice")
+            self.model_default_voices[name] = voice
 
         self.default_model_name = default_model_name
 
@@ -93,7 +94,8 @@ class CoquiAPI(ls.LitAPI):
         # 2. Map 'voice' to 'speaker_ref' (string)
         # Priority: explicit request voice > per-model default > env default
         request_voice = request.get("voice")
-        if request_voice is not None:
+        speaker_ref = ""
+        if request_voice:
             speaker_ref = request_voice
         else:
             model_default_voice = getattr(self, "model_default_voices", {}).get(
@@ -101,8 +103,6 @@ class CoquiAPI(ls.LitAPI):
             )
             if model_default_voice:
                 speaker_ref = model_default_voice
-            else:
-                speaker_ref = os.getenv("DEFAULT_VOICE", "Craig Gutsy")
 
         # 3. Language
         language = request.get("instructions", "en")  # Default to English
@@ -116,6 +116,7 @@ class CoquiAPI(ls.LitAPI):
         }
 
     def predict(self, inputs):
+        print(inputs)
         model_name = inputs["model_name"]
         tts = self.models[model_name]
 
@@ -132,35 +133,35 @@ class CoquiAPI(ls.LitAPI):
         speaker_wav = None
         speaker = None
 
-        # Resolve speaker_ref to a file
-        # Priority 1: If speaker_ref already looks like a path, try it directly.
-        if os.path.isabs(speaker_ref) or os.path.sep in speaker_ref:
-            if os.path.exists(speaker_ref):
-                speaker_wav = speaker_ref
+        if speaker_ref:
+            # Resolve speaker_ref to a file
+            # Priority 1: If speaker_ref already looks like a path, try it directly.
+            if os.path.isabs(speaker_ref) or os.path.sep in speaker_ref:
+                if os.path.exists(speaker_ref):
+                    speaker_wav = speaker_ref
 
-        # Priority 2: Exact filename match in speakers/
-        if speaker_wav is None and os.path.exists(
-            os.path.join(speakers_dir, speaker_ref)
-        ):
-            speaker_wav = os.path.join(speakers_dir, speaker_ref)
+            # Priority 2: Exact filename match in speakers/
+            if speaker_wav is None and os.path.exists(
+                os.path.join(speakers_dir, speaker_ref)
+            ):
+                speaker_wav = os.path.join(speakers_dir, speaker_ref)
 
-        # Priority 3: Match {speaker_ref}.wav
-        if speaker_wav is None and os.path.exists(
-            os.path.join(speakers_dir, f"{speaker_ref}.wav")
-        ):
-            speaker_wav = os.path.join(speakers_dir, f"{speaker_ref}.wav")
+            # Priority 3: Match {speaker_ref}.wav
+            if speaker_wav is None and os.path.exists(
+                os.path.join(speakers_dir, f"{speaker_ref}.wav")
+            ):
+                speaker_wav = os.path.join(speakers_dir, f"{speaker_ref}.wav")
 
-        if speaker_wav:
-            print(f"Resolved speaker '{speaker_ref}' to wav file: {speaker_wav}")
-            speaker = None
-        else:
-            # If speaker_ref is not a wav file (not found), then fill the speaker as same as speaker_ref value
-            print(f"Speaker '{speaker_ref}' not found as file. Using as speaker name.")
-            speaker = speaker_ref
-            speaker_wav = None
-
-        if not speaker_wav and not speaker:
-            raise RuntimeError("No speaker reference available.")
+            if speaker_wav:
+                print(f"Resolved speaker '{speaker_ref}' to wav file: {speaker_wav}")
+                speaker = None
+            else:
+                # If speaker_ref is not a wav file (not found), then fill the speaker as same as speaker_ref value
+                print(
+                    f"Speaker '{speaker_ref}' not found as file. Using as speaker name."
+                )
+                speaker = speaker_ref
+                speaker_wav = None
 
         if "multi" not in model_name:
             language = None

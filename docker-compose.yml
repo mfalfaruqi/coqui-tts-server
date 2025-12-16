@@ -7,6 +7,7 @@ services:
       - "8000:8000"
     volumes:
       - ./data/models:/root/.local/share/tts # Persist downloaded models
+      - ./tts_models.json:/app/tts_models.json
     env_file:
       - .env
     deploy:

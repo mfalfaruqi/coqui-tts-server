@@ -55,6 +55,7 @@ curl -X POST "http://localhost:8000/v1/audio/speech" \
     "model": "tts_models/multilingual/multi-dataset/xtts_v2",
     "input": "Hello from Coqui TTS",
     "voice": "Craig Gutsy",
+    "instructions": "en",
     "response_format": "mp3"
   }'
 ```
@@ -63,5 +64,14 @@ JSON fields:
 
 - `model` – model name from preset data
 - `input` – text to be converted to speech
-- `voice` – (optional) overrides the default speaker voice for this request. make sure the speaker name is available in the preset data or the path to a WAV file
-- `response_format` – (optional) response format, default `mp3`, available formats: WAV, MP3, OGG, FLV, MP4, AAC, and WMA
+- `voice` – (optional) overrides the default speaker voice. You can use a speaker name from the model's preset, or a filename (without extension) of a `.wav` file located in the `speakers/` directory.
+- `instructions` – (optional) language code (e.g. `en`, `es`, `fr`), default `en`.
+- `response_format` – (optional) response format, default `mp3`. Available: `wav`, `mp3` (and others supported by ffmpeg).
+
+## Custom Voices
+
+To use custom voices:
+
+1. Create a `speakers/` directory in the root.
+2. Add your reference audio files (e.g. `myvoice.wav`).
+3. Use the filename in the API request: `"voice": "myvoice"`.
