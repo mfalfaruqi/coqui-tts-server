@@ -42,7 +42,7 @@ Edit [`tts_models.json`](tts_models.json) to list the models you want to preload
 - `model_name` – Coqui TTS model id
 - `default_voice` – speaker name from preset data or path to a WAV file
 
-Each model in this file is loaded once at startup. The `model` field in the request must match one of these `model_name` values. Preset default voices must match the speaker name from preset model's speaker data. See [here](https://github.com/idiap/coqui-ai-TTS/?tab=readme-ov-file#multi-speaker-models) for getting speaker list.
+Each model in this file is loaded once at startup. The `model` field in the request must match one of these `model_name` values. Preset default voices must match the speaker name from preset model's speaker data. See [Coqui TTS documentation](https://github.com/idiap/coqui-ai-TTS/?tab=readme-ov-file#multi-speaker-models) for getting speaker list.
 
 ## Call the API
 
